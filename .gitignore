@@ -1,0 +1,11 @@
+# Kişisel veriler repoya girmez — hesap hash'leri, oturumlar, finans kayıtları
+data/
+
+# Bağımlılıklar (testler için jsdom)
+node_modules/
+test/node_modules/
+
+# İşletim sistemi / editör artıkları
+Thumbs.db
+.DS_Store
+*.log
