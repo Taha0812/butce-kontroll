@@ -35,6 +35,10 @@ window.App = (function () {
 
   function openAdd(preset) {
     resetForm();
+    if (preset && (preset.type === "income" || preset.type === "expense")) {
+      form.type = preset.type;
+      form.categoryId = null;
+    }
     if (preset && preset.categoryId) {
       form.categoryId = preset.categoryId;
       form.type = Store.category(preset.categoryId).type || "expense";
@@ -588,6 +592,15 @@ window.App = (function () {
     Charts.onResize(() => {
       if (UI.current === "report") Views.render("report");
     });
+
+    /* PWA kısayolu: /?add=income veya /?add=expense → hızlı ekleme ekranı */
+    try {
+      const param = new URLSearchParams(location.search).get("add");
+      if (param === "income" || param === "expense") {
+        openAdd({ type: param });
+        history.replaceState(null, "", location.pathname);
+      }
+    } catch (e) {}
   }
 
   /* Uygulama ancak giriş yapıldığında başlar (Auth.init çağırır) */

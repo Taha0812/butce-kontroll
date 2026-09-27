@@ -283,7 +283,7 @@ window.Auth = (function () {
       if (hint) hint.textContent = "Hesabın ve kayıtların sunucuda data\\ klasöründe saklanır; başka tarayıcıdan da giriş yapabilirsin.";
     } else {
       badge.innerHTML = '<span class="pill warn">🔒 Yerel mod</span>';
-      if (hint) hint.textContent = "Sunucuya ulaşılamıyor — hesabın bu tarayıcıda tutuluyor. Tam özellik için baslat.bat ile sunucuyu başlat.";
+      if (hint) hint.textContent = "Hesabın ve kayıtların bu tarayıcıda saklanıyor (cihazdan çıkmaz). Kendi bilgisayarında senkron için `node server.js` ile sunucuyu başlat.";
     }
   }
 

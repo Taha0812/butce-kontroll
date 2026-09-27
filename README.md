@@ -6,6 +6,7 @@ sunucu (`server.js`, bağımlılık yok) verileri kullanıcı bazında `data\` k
 **Yerel Mod**'da aynı arayüzle çalışmaya devam eder.
 
 > 📦 **Depo:** [github.com/Taha0812/butce-kontroll](https://github.com/Taha0812/butce-kontroll) · `main`
+> 🌐 **Canlı (telefon/tablet):** [taha0812.github.io/butce-kontroll](https://taha0812.github.io/butce-kontroll/)
 >
 > ```bash
 > git clone https://github.com/Taha0812/butce-kontroll.git
@@ -39,6 +40,27 @@ node "C:\Users\PC\Desktop\Proje\Bütce Kontroll\server.js"
 Sunucu yoksa **Yerel Mod**: kayıt/giriş yine çalışır ama hesaplar ve veriler yalnızca o tarayıcıda
 saklanır. Canlı kur/altın fiyatları da `file://` ile bazı tarayıcılarda çalışmayabilir — bu yüzden
 1. yöntem tercih edilir.
+
+---
+
+## 📱 Mobil kullanım
+
+**Yayında (telefonunla aç):** [taha0812.github.io/butce-kontroll](https://taha0812.github.io/butce-kontroll/)
+— GitHub Pages üzerinden servis edilir, kurulum gerektirmez.
+
+- **Uygulama gibi aç:** sayfayı aç → tarayıcıda **Paylaş** → **Ana Ekrana Ekle**.
+  `manifest.webmanifest` sayesinde tam ekran (standalone), kendi ikonu ve tema rengiyle açılır.
+- **PWA kısayolları:** ana ekrana eklerken *Gelir ekle* / *Gider ekle* kısayolları da gelir
+  (`./?add=income`, `./?add=expense`) → doğrudan hızlı ekleme ekranı açılır.
+- **Mobil düzen:** alt menü + ortadaki ➕ butonu güvenli alan (`safe-area`) hesaba katılarak yerleşir,
+  çentikli cihazlarda başlık durum çubuğunun altına kaçmaz, form alanları 16 px (iOS yakınlaştırma
+  engellenir), dokunma hedefleri ≥ 44 px, tuş takımı kısa ekranlarda küçülür, yatay kullanım desteklenir.
+- **Canlı fiyatlar telefonda da çalışır:** kur/altın API'leri `Access-Control-Allow-Origin: *`
+  gönderir; çevrimdışıysa son bilinen değer ve uyarı gösterilir.
+- Pages'te sunucu olmadığı için uygulama **Yerel Mod**'da çalışır: hesaplar ve kayıtlar o tarayıcıda
+  (localStorage) tutulur. Bilgisayarında tam senkron istersen 1. yöntemi (`node server.js`) kullan;
+  verini *Ayarlar → Dışa aktar / İçe aktar* ile taşıyabilirsin.
+- Ayarlar → *Görünüm* kartında da "Ana Ekrana Ekle" ipucu bulunur (uygulama olarak açıldıysa gizlenir).
 
 ---
 
@@ -116,6 +138,7 @@ tektir (büyük/küçük harf duyarsız), güvenlik sorusu/cevabı opsiyonel ama
 | Taksitli harcama: otomatik taksit planı, kalan taksit takibi | ✅ |
 | Karanlık / aydınlık tema, misafir modu, JSON yedek al/geri yükle | ✅ |
 | Mobil öncelikli arayüz, masaüstünde ortalanmış uygulama kabuğu | ✅ |
+| PWA: `manifest` + ikon, ana ekrana ekleme, hızlı ekleme kısayolları (`?add=`) | ✅ |
 
 ### Canlı veri kaynakları (anahtarsız, ücretsiz)
 - **Kur:** `https://open.er-api.com/v6/latest/USD` → USD/EUR/GBP/CHF/JPY (TRY karşılıkları)
@@ -131,6 +154,8 @@ tektir (büyük/küçük harf duyarsız), güvenlik sorusu/cevabı opsiyonel ama
 ```
 Bütce Kontroll/
 ├─ index.html          # Uygulama iskeleti + giriş/kayıt ekranı
+├─ manifest.webmanifest# PWA tanımı (ana ekrana ekle, tam ekran, kısayollar)
+├─ icons/icon.svg      # Uygulama ikonu (yol tabanlı, tüm sistemlerde çizilir)
 ├─ server.js           # Yerel sunucu: statik dosyalar + hesap API'si (bağımlılık yok)
 ├─ baslat.bat          # Tek tıkla sunucu + tarayıcı açılışı
 ├─ data/               # [sunucu tarafından üretilir] kullanıcılar, oturumlar, hesap verileri

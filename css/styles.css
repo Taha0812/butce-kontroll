@@ -1528,3 +1528,154 @@ button.link {
     font-size: 13.5px;
   }
 }
+
+/* =========================================================
+   📱 Mobil optimizasyonlar (telefon / tablet)
+   ========================================================= */
+
+/* 1) iOS Safari: form alanına odaklanınca sayfanın kendiliğinden
+      yakınlaştırılmasını önler (font-size < 16px ise Safari bunu yapar) */
+input,
+select,
+textarea {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 2) Dokunma gecikmesi yok (eski çift-tık bekleme süresi) */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* 3) Çentikli (notch) cihazlarda başlık içeriği durum çubuğunun altına kaçmasın */
+.app-header {
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
+}
+
+/* 4) Alt menü + iPhone ana ekran çubuğu kadar alt boşluk */
+.main {
+  padding-bottom: calc(var(--nav-h) + 30px + env(safe-area-inset-bottom, 0px));
+}
+
+/* 5) Mobil tarayıcı adres çubuğu açılıp kapanırken yükseklik doğru kalsın */
+@supports (height: 100dvh) {
+  .app {
+    min-height: 100dvh;
+  }
+}
+
+/* 6) Dokunma hedefleri büyüt (Apple/Google ≈44 px önerisi) */
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.key {
+  min-height: 52px;
+  font-size: 20px;
+}
+
+.nav-btn {
+  min-height: 48px;
+  justify-content: center;
+}
+
+.toggle-row,
+.row-item {
+  min-height: 44px;
+}
+
+/* 7) Klavye ile gezinirken odak halkası görünsün */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* 8) Dar ekran (≤380 px): başlıkta dönem satırı gizlenir, içerik nefes alır */
+@media (max-width: 380px) {
+  .brand-text p {
+    display: none;
+  }
+
+  .brand-text h1 {
+    font-size: 15.5px;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .main {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .bottom-nav {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
+/* 9) Alçak ekran (kısa telefonlar): alt-pencere tam ekrana yakın,
+      tuş takımı ve tutar alanı küçülür → kaydırma azalır */
+@media (max-height: 700px) {
+  .sheet {
+    max-height: 100dvh;
+  }
+
+  .amount-display .a-val {
+    font-size: 32px;
+  }
+
+  .key {
+    min-height: 46px;
+    padding: 10px 0;
+  }
+}
+
+/* 10) Yatay kullanım (telefon yan döndüğünde) */
+@media (max-height: 520px) and (orientation: landscape) {
+  .sheet-handle {
+    margin-top: 6px;
+  }
+
+  .amount-display {
+    padding: 6px 0 2px;
+  }
+
+  .key {
+    min-height: 40px;
+    padding: 8px 0;
+    font-size: 18px;
+  }
+
+  .brand-text p {
+    display: none;
+  }
+}
+
+/* 11) Uygulama hissi: alt menü, çipler ve tuşlar seçilmesin */
+.nav-btn,
+.cat-pick,
+.cat-chip,
+.key,
+.seg button,
+.stat {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 12) Uzun notlar / açıklama metinleri taşmasın */
+.card p,
+.small {
+  overflow-wrap: anywhere;
+}

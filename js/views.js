@@ -435,6 +435,10 @@ window.Views = (function () {
     const accMode = Auth.currentMode();
     const accEmail = Auth.email();
     const accBadge = accMode === "server" ? "good" : accMode === "local" ? "warn" : "accent";
+    /* PWA olarak (ana ekrandan) açıldıysa "Ana Ekrana Ekle" ipucu gereksiz */
+    const isStandalone =
+      (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches) ||
+      window.navigator.standalone === true;
 
     el.innerHTML = `
       <div class="section-title">Hesap</div>
@@ -483,6 +487,16 @@ window.Views = (function () {
           <div class="tr-text"><div class="t">Kesim günü hatırlatmaları</div><div class="s">Ana ekranda kart uyarıları göster</div></div>
           <button class="switch ${st.reminders ? "on" : ""}" id="toggleReminders" aria-label="Hatırlatmalar"></button>
         </div>
+        ${
+          isStandalone
+            ? ""
+            : `<div class="toggle-row" style="margin-top:8px">
+          <div class="tr-text">
+            <div class="t">📱 Telefonda uygulama gibi aç</div>
+            <div class="s">Sayfayı aç → <b>Paylaş</b> → <b>Ana Ekrana Ekle</b>. Tam ekran açılır, çevrimdışı da çalışır.</div>
+          </div>
+        </div>`
+        }
       </div>
 
       <div class="section-title">Kategoriler</div>

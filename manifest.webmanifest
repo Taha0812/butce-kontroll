@@ -1,0 +1,36 @@
+{
+  "name": "Bütçe Kontroll — Kişisel Finans",
+  "short_name": "Bütçe Kontroll",
+  "description": "Gelir/gider takibi, esnek bütçe dönemleri, kredi kartı & taksit planları, canlı kur ve altın, görsel raporlar.",
+  "lang": "tr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "butce-kontroll",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Gelir ekle",
+      "short_name": "Gelir",
+      "url": "./?add=income"
+    },
+    {
+      "name": "Gider ekle",
+      "short_name": "Gider",
+      "url": "./?add=expense"
+    }
+  ]
+}
