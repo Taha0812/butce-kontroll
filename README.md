@@ -5,6 +5,16 @@ Saf HTML + CSS + JavaScript, harici kütüphane yok. **Kayıt/Giriş ile her hes
 sunucu (`server.js`, bağımlılık yok) verileri kullanıcı bazında `data\` klasöründe saklar, sunucu yoksa uygulama
 **Yerel Mod**'da aynı arayüzle çalışmaya devam eder.
 
+> 📦 **Depo:** [github.com/Taha0812/butce-kontroll](https://github.com/Taha0812/butce-kontroll) · `main`
+>
+> ```bash
+> git clone https://github.com/Taha0812/butce-kontroll.git
+> cd butce-kontroll
+> baslat.bat        # ya da: node server.js  →  http://localhost:8123
+> ```
+>
+> Kişisel veriler (`data\`) repoya **dahil değildir** (`.gitignore`) — ilk çalıştırmada sıfırdan oluşur.
+
 ---
 
 ## 🚀 Çalıştırma (terminalden)
