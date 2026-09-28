@@ -1,0 +1,48 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "1) 🖥 Sunucuyu başlat (node server.js)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.js",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "2) 🌐 Uygulamayı tarayıcıda aç (debug)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:8123/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "sunucu (node server.js)",
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "3) 🧪 Testleri çalıştır (npm test)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm test",
+      "cwd": "${workspaceFolder}/test"
+    },
+    {
+      "name": "4) 🔍 Tek dosya testi (degisken: dosya)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "node ${input:testFile}",
+      "cwd": "${workspaceFolder}/test"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "testFile",
+      "type": "pickString",
+      "description": "Hangi test paketi?",
+      "options": ["store.test.js", "server.test.js", "dom.test.js", "dom.server.test.js"],
+      "default": "store.test.js"
+    }
+  ]
+}
