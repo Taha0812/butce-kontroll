@@ -139,6 +139,29 @@ tektir (büyük/küçük harf duyarsız), güvenlik sorusu/cevabı opsiyonel ama
 | Karanlık / aydınlık tema, misafir modu, JSON yedek al/geri yükle | ✅ |
 | Mobil öncelikli arayüz, masaüstünde ortalanmış uygulama kabuğu | ✅ |
 | PWA: `manifest` + ikon, ana ekrana ekleme, hızlı ekleme kısayolları (`?add=`) | ✅ |
+| **🔁 Tekrarlayan (otomatik) işlemler** — kira, maaş, abonelik; duraklat/sil | ✅ |
+| **🚧 Kategori limitleri** — kategori bazlı dönem bütçesi + aşım uyarısı + rapor çubuğu | ✅ |
+| **🎯 Birikim hedefleri** — hedef, son gün, katkı, "ne kadar/ay" önerisi | ✅ |
+| **🔍 İşlem arama & filtre** — metin arama, gelir/gider, kategori, kart filtresi | ✅ |
+| **📄 CSV içe/dışa aktarma** — Excel & diğer uygulamalar uyumlu, önizlemeli, mükerrer atlar | ✅ |
+
+### 🔎 İncelenen diğer bütçe uygulamaları ve buraya taşınanlar
+
+Sürüm 2 için sektördeki uygulamalar tek tek incelendi; hepsinde ortak olan, bu uygulamanın
+mimarisine (saf JS, build yok, yerel/hibrit depolama) uyan özellikler buraya alındı:
+
+| İncelenen uygulama | Öne çıkan yaklaşım | Buradaki karşılığı |
+| --- | --- | --- |
+| **Monefy**, **Money Manager (Realbyte)**, **Wallet (BudgetBakers)** | Tekrar eden kayıt, kategori limiti, CSV/Excel dışa aktarma | 🔁 Tekrarlayan işlemler, 🚧 Kategori limitleri, 📄 CSV |
+| **butce.app** | Kategori bazlı aylık bütçe, etiket/tarih/kart filtresi, takip listesi | 🚧 Limitler, 🔍 Arama/filtre, 🔁 Vade kartı |
+| **YNAB**, **Quicken Simplifi**, **PocketGuard** | Birikim hedefi, "bu kadar ayır" önerisi, hedefi bütçeleme | 🎯 Birikim hedefleri (aylık gerekli katkı hesabı) |
+| **Goodbudget** | Zarf (envelope) sistemi: kategoriye para ayır, aşınca uyarı | 🚧 Limit + ana ekranda 🚧 banner + raporda ilerleme |
+| **Monely**, **Honeydue**, **Copilot** | Baştan sona içe aktarma, önizleme, mükerrer tespiti | 📄 CSV önizleme (aynı satır iki kez girilmez) |
+| **Monarch**, **Rocket Money**, **Empower** | Abonelik/vade takibi, net görünüm | 🔁 "7 gün içindeki vadeler" kartı + kart kesim/son ödeme uyarıları |
+
+> **Bilinçli olarak yapılmayanlar:** banka otomatik bağlama (Plaid vb.), AI kategori tahmini,
+> bulut eşitleme — hepsi harici servis/anahtar gerektirir; uygulamanın "bağımlılıksız, veri cihazda"
+> ilkesiyle çelişir. Bunların yerine veri taşınabilirliği (JSON + CSV) güçlendirildi.
 
 ### Canlı veri kaynakları (anahtarsız, ücretsiz)
 - **Kur:** `https://open.er-api.com/v6/latest/USD` → USD/EUR/GBP/CHF/JPY (TRY karşılıkları)
@@ -172,7 +195,7 @@ Bütce Kontroll/
 │  ├─ auth.js          # Kayıt/giriş, oturum, SHA-256, sunucu senkronu, giriş ekranı
 │  └─ app.js           # Ekleme/düzenleme akışı, tuş takımı, kart & varlık formları, boot
 ├─ test/               # Test paketleri (gitignore: node_modules hariç repoda)
-│  ├─ store.test.js    #   veri/dönem + birleştirme
+│  ├─ store.test.js    #   veri/dönem + birleştirme + v2 (otomatik/limit/hedef/CSV)
 │  ├─ server.test.js   #   hesap API'si + izolasyon
 │  ├─ dom.test.js      #   jsdom ile arayüz (yerel mod)
 │  └─ dom.server.test.js # uçtan uca (gerçek sunucu, sunucu modu)
@@ -184,13 +207,13 @@ Bütce Kontroll/
 > ```bash
 > cd test
 > npm install     # yalnızca jsdom — bir kez yeter
-> npm test        # 4 paket → 212 assert
+> npm test        # 4 paket → 284 assert
 > ```
 >
 > Tek tek çalıştırmak için:
-> - `node test\store.test.js` — veri/dönem mantığı + birleştirme (27 assert)
+> - `node test\store.test.js` — veri/dönem, birleştirme, otomatik işlem, limit, hedef, CSV (69 assert)
 > - `node test\server.test.js` — hesap API'si + izolasyon (46 assert)
-> - `node test\dom.test.js` — jsdom ile arayüz, yerel mod (103 assert; `dom.*` testleri
+> - `node test\dom.test.js` — jsdom ile arayüz, yerel mod (133 assert; `dom.*` testleri
 >   `http://localhost:8123` sunucusunun açık olmasını bekler)
 > - `node test\dom.server.test.js` — uçtan uca, gerçek sunucu ile sunucu modu (36 assert)
 
@@ -204,21 +227,44 @@ Sunucuda: `data\u_<id>.json` · Tarayıcıda: `localStorage["butceKontroll.data.
 ```jsonc
 {
   "__savedAt": 1790000000000,       // çakışmada hangi kopya güncel?
-  "settings":  { "theme": "dark", "periodStartDay": 15, "periodBudget": 15000, "reminders": true },
+  "settings":  { "theme": "dark", "periodStartDay": 15, "periodBudget": 15000, "reminders": true,
+                 "categoryBudgets": { "market": 3000, "eglence": 800 } },   // 🚧 kategori limitleri
   "categories":[ { "id": "market", "name": "Market", "icon": "🛒", "type": "expense", "color": "#ff8a3d" } ],
   "transactions": [
     { "id": "t_…", "type": "expense|income", "amount": 125.5, "categoryId": "market",
       "date": "2026-09-27", "note": "", "cardId": null,
-      "planId": null, "installmentIndex": null, "installmentCount": null, "createdAt": 0 }
+      "planId": null, "installmentIndex": null, "installmentCount": null, "createdAt": 0,
+      "recurringId": null, "recurringKey": null }   // 🔁 otomatik üretilen kayıt → mükerrer koruması
   ],
   "cards":  [ { "id": "k_…", "name": "Bonus", "last4": "4411", "statementDay": 5, "dueDay": 12, "limit": 20000, "color": "#2f6fed" } ],
   "assets": [ { "id": "a_…", "code": "USD|GRAM|…", "amount": 500 } ],
+  "recurring": [                                    // 🔁 tekrarlayan (otomatik) işlemler
+    { "id": "r_…", "name": "Kira", "type": "expense", "categoryId": "ev", "amount": 8000,
+      "freq": "daily|weekly|monthly|yearly", "startDate": "2026-09-01", "nextDate": "2026-10-01",
+      "cardId": null, "note": "", "active": true }
+  ],
+  "goals": [                                        // 🎯 birikim hedefleri
+    { "id": "g_…", "name": "Tatil", "target": 50000, "deadline": "2027-07-01", "note": "",
+      "contributions": [ { "id": "gc_…", "date": "2026-09-27", "amount": 4000 } ] }
+  ],
   "rates":  { "updatedAt": 0, "live": true, "map": { "USD": 48.9, "GRAM": 6740 }, "prev": { } }
 }
 ```
 
 **Dönem hesabı:** `periodStartDay = 15` ise dönem *her ayın 15'i → gelecek ayın 14'ü*.
 Bugün 27 Eylül ise içinde bulunulan dönem **15 Eylül – 14 Ekim**, harcamalar ve bütçe bu aralığa göre hesaplanır.
+
+**🔁 Otomatik işlemler:** uygulama açıldığında `nextDate ≤ bugün` olan her kural için kayıt üretilir
+(`recurringKey = kuralId + ":" + tarih` sayesinde aynı vade asla iki kez kaydedilmez); kural
+`active: false` ise duraklatılır. Aylık kuralda gün 1–28 arasına sabitlenir → şubat/ay sonu sorunu yaşanmaz.
+
+**🎯 Hedef katkıları** harcama sayılmaz: birikim, paranın hâlâ kullanıcıda olmasıdır; raporlara ve
+bütçe tüketimine girmez.
+
+**📄 CSV biçimi:** `Tarih,Tur,Kategori,Tutar,Kart,Not` (virgül; okuyucu `;` ayracını ve tırnakları da
+anlar). İçe aktarmada sütunlar başlıktan eşleşir (Türkçe/İngilizce), başlık yoksa konumsal okunur;
+`tarih` biçimi `2026-09-27` / `27.09.2026` olabilir, `1.500,75` gibi tutarlar çözümlenir ve
+aynı işlem (tarih+tür+tutar+kategori+not) mükerrer sayılır.
 
 ---
 
@@ -228,4 +274,13 @@ Bugün 27 Eylül ise içinde bulunulan dönem **15 Eylül – 14 Ekim**, harcama
 - **Kart + Taksit** seçersen gelecek aylar için otomatik taksit planı oluşur (Kartlar ekranında görünür).
 - Ana ekrandaki kategori çiplerine **doğrudan dokunmak** = o kategoriden hızlı gider girmek.
 - Ayarlar → *Dönem başlangıç günü* → maaş/gün bazlı bütçe dönemini özelleştir.
+- **🔁 Otomatik işlemler:** ana sayfadaki *Otomatik işlemler → Ekle*; kira/maaş/abonelik gibi tekrar
+  edenler sen uygulamayı her açtığında kendiliğinden kaydedilir. `?add=expense` kısayolu gibi
+  ana ekran kısayolları PWA'de *Ana Ekrana Ekle* ile başlatılabilir.
+- **🚧 Kategori limiti:** Ayarlar → *Kategori limitleri* → kategoriye üst sınır yaz → *Limitleri kaydet*.
+  Aşım olursa ana ekranda 🚧 banner, Raporlar'da ilerleme çubuğu görünür.
+- **🎯 Hedef:** Varlıklar → *Hedef ekle*; son gün belirlersen uygulama "bu kadar/ay ayır" önerir.
+- **🔍 Arama:** *Tüm işlemler* → kategori, not, kart, tutara göre filtrele; gelir/gider + kategori + kart çipleri.
+- **📄 CSV:** Ayarlar → *CSV olarak dışa aktar* (Excel/Monefy/Money Manager) ya da *CSV içe aktar*
+  (banka ekstresi → önizleme → mükerrerler otomatik atlanır).
 - Başlıktaki **👤** → hesap paneli: kullanıcı, mod, senkron durumu, çıkış.

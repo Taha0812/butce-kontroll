@@ -68,6 +68,17 @@ window.Views = (function () {
         const dd = Store.daysUntil(c.dueDay);
         if (dd <= 3) banners.push({ ico: "⏰", title: `${c.name} son ödeme`, txt: dd === 0 ? "Bugün!" : `${dd} gün kaldı` });
       });
+      /* Kategori limiti ihlalleri (envelope) — kart uyarılarından önce gelir */
+      Store.categoryUsage(b)
+        .filter((u) => u.over)
+        .slice(0, 2)
+        .forEach((u) =>
+          banners.unshift({
+            ico: "🚧",
+            title: `${u.category.name} limiti aşıldı`,
+            txt: `${UI.fmtMoney(u.spent)} / ${UI.fmtMoney(u.limit)}`,
+          })
+        );
       if (budget > 0 && used >= 100)
         banners.unshift({ ico: "🚨", title: "Dönem bütçesi aşıldı", txt: `${esc(UI.fmtMoney(s.expense - budget))} over limit` });
       else if (budget > 0 && used >= 80)
@@ -76,6 +87,39 @@ window.Views = (function () {
 
     const recent = Store.allTx().slice(0, 6);
     const cats = Store.categories("expense");
+
+    /* Otomatik (tekrarlayan) işlemler kartı */
+    const recActive = Store.recurringRules(true);
+    const upcoming = Store.upcomingRecurring(7);
+    const recurringHtml = `
+      <div class="section-title">
+        <span>🔁 Otomatik işlemler</span>
+        <button class="link" id="homeRecurring">${recActive.length ? `Yönet (${recActive.length})` : "＋ Ekle"}</button>
+      </div>
+      <div class="card tight">
+        ${
+          recActive.length
+            ? upcoming.length
+              ? upcoming
+                  .map(({ rule, days }) => {
+                    const rc = Store.category(rule.categoryId);
+                    const when = days <= 0 ? "bugün" : days === 1 ? "yarın" : `${days} gün sonra`;
+                    return `<div class="row-item">
+                      <span class="ic" style="width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:${rc.color}22;font-size:19px">${rc.icon}</span>
+                      <span class="mid">
+                        <span class="t">${esc(rule.name)}</span>
+                        <span class="s">${esc(Store.FREQ_LABEL[rule.freq] || rule.freq)} · ${esc(rc.name)} · ${esc(when)} (${esc(rule.nextDate)})</span>
+                      </span>
+                      <span class="right"><span class="amt ${rule.type === "income" ? "in" : "out"}">${
+                        rule.type === "income" ? "+" : "−"
+                      }${esc(UI.fmtMoney(rule.amount))}</span></span>
+                    </div>`;
+                  })
+                  .join("")
+              : `<div class="empty" style="padding:16px">7 gün içinde vadesi gelen otomatik işlem yok.</div>`
+            : `<div class="empty" style="padding:16px"><span class="big-ico">🔁</span>Kira, maaş, abonelik gibi tekrar edenleri eklediğinde uygulama açıldığında kendiliğinden kaydedilir.</div>`
+        }
+      </div>`;
 
     el.innerHTML = `
       <div class="card budget-card">
@@ -112,13 +156,15 @@ window.Views = (function () {
       </div>
 
       ${banners
-        .slice(0, 2)
+        .slice(0, 3)
         .map(
           (bn) => `<div class="banner"><span class="b-ico">${bn.ico}</span><span class="b-txt"><strong>${esc(
             bn.title
           )}</strong>${esc(bn.txt)}</span></div>`
         )
         .join("")}
+
+      ${recurringHtml}
 
       <div class="section-title">Hızlı gider ekle</div>
       <div class="chip-row" style="margin-bottom:16px">
@@ -148,6 +194,8 @@ window.Views = (function () {
     $$("[data-tx]", el).forEach((btn) => (btn.onclick = () => App.openEdit(btn.dataset.tx)));
     const allBtn = $("#homeAllTx", el);
     if (allBtn) allBtn.onclick = () => App.openTxList();
+    const recBtn = $("#homeRecurring", el);
+    if (recBtn) recBtn.onclick = () => App.openRecurringList();
     const setBtn = $("#homeSetBudget", el);
     if (setBtn) setBtn.onclick = () => UI.showView("settings");
   }
@@ -172,6 +220,38 @@ window.Views = (function () {
       prev = { start: st, end: en, startISO: Store.iso(st), endISO: Store.iso(en) };
     }
     const prevSums = prev ? Store.sums(Store.txIn(prev)) : null;
+
+    /* Kategori limitleri (seçili aralık) */
+    const usage = Store.categoryUsage(b);
+    const usageHtml = usage.length
+      ? `<div class="card">
+        <div class="section-title" style="margin-top:0"><span>🚧 Kategori limitleri</span><span class="link">${esc(
+          Store.rangeLabel(reportRange)
+        )}</span></div>
+        ${usage
+          .map(
+            (u) => `<div style="margin-bottom:14px">
+            <div class="budget-top" style="padding:0;align-items:flex-end">
+              <div>
+                <div class="budget-label">${u.category.icon} ${esc(u.category.name)}</div>
+                <div class="small muted" style="margin-top:2px">${esc(UI.fmtMoney(u.spent))} / ${esc(UI.fmtMoney(u.limit))}${
+              u.over ? ` · ${esc(UI.fmtMoney(Math.abs(u.remaining)))} aşıldı` : ` · kalan ${esc(UI.fmtMoney(u.remaining))}`
+            }</div>
+              </div>
+              <div style="text-align:right">
+                <span class="pill ${u.over ? "" : u.close ? "accent" : "good"}">%${u.pct.toFixed(0)}</span>
+              </div>
+            </div>
+            <div class="progress" style="margin-top:8px"><i class="${u.over ? "over" : u.close ? "warn" : ""}" style="width:${Math.min(
+              100,
+              u.pct
+            ).toFixed(1)}%"></i></div>
+          </div>`
+          )
+          .join("")}
+        <p class="small muted" style="margin-top:2px">Limitleri <b>Ayarlar → Kategori limitleri</b> bölümünden değiştirebilirsin.</p>
+      </div>`
+      : "";
 
     el.innerHTML = `
       <div class="seg" id="reportSeg">
@@ -228,7 +308,9 @@ window.Views = (function () {
         <div id="barsBox">${
           cats.length ? "" : `<div class="empty"><span class="big-ico">📉</span>Gösterilecek veri yok</div>`
         }</div>
-      </div>`;
+      </div>
+
+      ${usageHtml}`;
 
     $$("[data-range]", el).forEach((btn) => (btn.onclick = () => { reportRange = btn.dataset.range; report(); }));
 
@@ -274,6 +356,43 @@ window.Views = (function () {
     const updated = rates && rates.updatedAt ? new Date(rates.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "—";
     const liveBadge = rates && rates.live ? `<span class="pill good">● canlı</span>` : `<span class="pill warn">○ çevrimdışı / önbellek</span>`;
 
+    /* Birikim hedefleri (YNAB/Simplifi tarzı) */
+    const goalList = Store.goals();
+    const goalsHtml = `
+      <div class="section-title">
+        <span>🎯 Birikim hedefleri</span>
+        <button class="link" id="addGoalBtn">${goalList.length ? "＋ Yeni hedef" : "＋ Hedef ekle"}</button>
+      </div>
+      ${
+        goalList.length
+          ? goalList
+              .map((g) => {
+                const p = Store.goalProgress(g);
+                return `<div class="card" data-goal-open="${g.id}" style="cursor:pointer;margin-bottom:12px">
+                <div class="budget-top">
+                  <div>
+                    <div class="budget-label">${esc(g.name)}</div>
+                    <div class="budget-amount">${esc(UI.fmtMoney(p.saved))}</div>
+                    <div class="small muted" style="margin-top:2px">Hedef: ${esc(UI.fmtMoney(p.target))} · ${
+                  p.done ? "🎉 tamamlandı" : `kalan ${esc(UI.fmtMoney(p.remaining))}`
+                }</div>
+                  </div>
+                  <div style="text-align:right"><span class="pill ${p.done ? "good" : "accent"}">%${p.pct.toFixed(0)}</span></div>
+                </div>
+                <div class="progress"><i class="${p.done ? "" : p.pct >= 80 ? "warn" : ""}" style="width:${Math.min(100, p.pct).toFixed(
+                  1
+                )}%"></i></div>
+                <div class="budget-meta">
+                  ${g.deadline ? `<span class="pill">📅 ${esc(UI.relDay(g.deadline))}</span>` : ""}
+                  ${!p.done && p.monthly > 0 ? `<span class="pill good">💡 ${esc(UI.fmtMoney(p.monthly))}/ay</span>` : ""}
+                  <span class="pill">${(g.contributions || []).length} katkı</span>
+                </div>
+              </div>`;
+              })
+              .join("")
+          : `<div class="card"><div class="empty"><span class="big-ico">🎯</span>Tatil, araba, acil durum fonu…<br/>Hedefini yaz, ne kadar ayırman gerektiğini hesaplayalım.</div></div>`
+      }`;
+
     el.innerHTML = `
       <div class="card">
         <div class="portfolio-hero">
@@ -308,6 +427,8 @@ window.Views = (function () {
         }
       </div>
 
+      ${goalsHtml}
+
       <div class="section-title">Piyasa fiyatları (TRY)</div>
       <div class="rate-grid">
         ${Store.RATE_LIST.map((r) => rateCard(r, map, prev)).join("")}
@@ -318,6 +439,9 @@ window.Views = (function () {
 
     const addBtn = $("#addAssetBtn", el);
     if (addBtn) addBtn.onclick = () => App.openAssetSheet();
+    const goalBtn = $("#addGoalBtn", el);
+    if (goalBtn) goalBtn.onclick = () => App.openGoalSheet();
+    $$("[data-goal-open]", el).forEach((b) => (b.onclick = () => App.openGoalDetail(b.dataset.goalOpen)));
     const refBtn = $("#refreshRates", el);
     if (refBtn)
       refBtn.onclick = async () => {
@@ -429,6 +553,9 @@ window.Views = (function () {
     const el = $("#view-settings");
     const st = Store.settings();
     const customCats = Store.categories().filter((c) => String(c.id).startsWith("c_"));
+    const budgets = Store.categoryBudgets();
+    const spentMap = {};
+    Store.txIn(Store.periodBounds(0), "expense").forEach((t) => (spentMap[t.categoryId] = (spentMap[t.categoryId] || 0) + t.amount));
     let pickedColor = PALETTE[0];
 
     const accUser = Auth.user();
@@ -537,6 +664,35 @@ window.Views = (function () {
         }
       </div>
 
+      <div class="section-title">Kategori limitleri</div>
+      <div class="card">
+        <p class="small muted" style="margin-bottom:10px">
+          Her gider kategorisine dönemlik üst sınır koy (Goodbudget/Monefy mantığı). Limit aşılırsa ana ekranda
+          <b>🚧</b> uyarısı, Raporlar'da ilerleme çubuğu görünür. Boş bırakılan limit yok sayılır.
+        </p>
+        <div class="list">
+          ${Store.categories("expense")
+            .map((c) => {
+              const spent = spentMap[c.id] || 0;
+              const lim = budgets[c.id] || 0;
+              return `<div class="row-item">
+                <span class="ic" style="width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:${c.color}22">${c.icon}</span>
+                <span class="mid">
+                  <span class="t">${esc(c.name)}</span>
+                  <span class="s">Bu dönem: ${esc(UI.fmtMoney(spent))}${
+                lim ? ` · limit ${esc(UI.fmtMoney(lim))}${spent > lim ? " · aşıldı" : ""}` : " · limit yok"
+              }</span>
+                </span>
+                <input class="input" data-cb="${c.id}" type="number" min="0" step="100" inputmode="decimal" placeholder="—" value="${
+                lim || ""
+              }" style="width:120px;text-align:right" aria-label="${esc(c.name)} limiti" />
+              </div>`;
+            })
+            .join("")}
+        </div>
+        <button class="btn primary sm block" id="saveCatBudgets" style="margin-top:12px">Limitleri kaydet</button>
+      </div>
+
       <div class="section-title">Veri &amp; hesaplar arası aktarım</div>
       <div class="card">
         <div class="toggle-row">
@@ -548,6 +704,14 @@ window.Views = (function () {
           <button class="btn sm" id="importBtn">İçe aktar</button>
         </div>
         <div class="toggle-row">
+          <div class="tr-text"><div class="t">CSV olarak dışa aktar</div><div class="s">Excel, Monefy, Money Manager uyumlu tablo</div></div>
+          <button class="btn sm" id="exportCsvBtn">İndir</button>
+        </div>
+        <div class="toggle-row">
+          <div class="tr-text"><div class="t">CSV içe aktar</div><div class="s">Banka ekstresi / başka uygulama · önizlemeli, mükerrerler atlanır</div></div>
+          <button class="btn sm" id="importCsvBtn">Seç</button>
+        </div>
+        <div class="toggle-row">
           <div class="tr-text"><div class="t">Her şeyi sıfırla</div><div class="s">Bu hesaptaki tüm kayıtlar silinir</div></div>
           <button class="btn sm danger" id="resetBtn">Sıfırla</button>
         </div>
@@ -555,6 +719,7 @@ window.Views = (function () {
           Hesaplar arası taşıma: <b>Dışa aktar</b> → çıkış yap → hedef hesapta giriş yap → <b>İçe aktar</b>.
         </p>
         <input type="file" id="importFile" accept="application/json" hidden />
+        <input type="file" id="importCsvFile" accept=".csv,text/csv,text/plain" hidden />
       </div>
 
       <p class="small muted" style="text-align:center;margin-top:6px">
@@ -618,6 +783,49 @@ window.Views = (function () {
           }
         })
     );
+
+    /* Kategori limitleri (envelope) */
+    const saveCb = $("#saveCatBudgets", el);
+    if (saveCb)
+      saveCb.onclick = () => {
+        let n = 0;
+        $$("[data-cb]", el).forEach((inp) => {
+          const v = Math.max(0, Number(inp.value) || 0);
+          Store.setCategoryBudget(inp.dataset.cb, v);
+          if (v > 0) n++;
+        });
+        UI.refresh();
+        UI.toast(n ? `${n} kategori limiti kaydedildi` : "Limitler temizlendi");
+      };
+
+    /* CSV dışa / içe aktarma */
+    $("#exportCsvBtn", el).onclick = () => {
+      const csv = Store.exportCSV();
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `butce-kontroll-${Auth.user() || "misafir"}-${Store.iso(new Date())}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      UI.toast("CSV indirildi");
+    };
+    $("#importCsvBtn", el).onclick = () => $("#importCsvFile", el).click();
+    $("#importCsvFile", el).onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const res = Store.importCSV(reader.result);
+          if (!res.rows.length) UI.toast("Dosyada eklenecek satır bulunamadı");
+          else App.openCsvPreview(res);
+        } catch (err) {
+          UI.toast("CSV okunamadı: " + (err && err.message ? err.message : "biçim hatalı"));
+        }
+        e.target.value = "";
+      };
+      reader.readAsText(file, "utf-8");
+    };
 
     $("#exportBtn", el).onclick = () => {
       const payload = JSON.parse(Store.exportJSON());

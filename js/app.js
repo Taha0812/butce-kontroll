@@ -289,32 +289,495 @@ window.App = (function () {
   }
 
   /* =========================================================
-     Tüm işlemler listesi
+     Tüm işlemler listesi — arama + filtre (rakip uygulamalardaki
+     "işlemleri tarih/kategori/hesap/nota göre filtrele" özelliği)
   ========================================================= */
+  function txRowHtml(t) {
+    const cat = Store.category(t.categoryId);
+    const sign = t.type === "income" ? "+" : "−";
+    const bits = [UI.relDay(t.date)];
+    if (t.installmentCount) bits.push(`Taksit ${t.installmentIndex}/${t.installmentCount}`);
+    if (t.recurringId) bits.push("🔁 otomatik");
+    if (t.cardId) {
+      const c = Store.cardById(t.cardId);
+      if (c) bits.push(c.name);
+    }
+    if (t.note) bits.push(t.note);
+    return `<button class="tx" data-open-tx="${t.id}">
+        <span class="ic" style="background:${cat.color}22">${cat.icon}</span>
+        <span class="mid"><span class="t">${esc(cat.name)}</span>
+        <span class="s">${esc(bits.join(" · "))}</span></span>
+        <span class="amt ${t.type === "income" ? "in" : "out"}">${sign}${esc(UI.fmtMoney(t.amount))}</span>
+      </button>`;
+  }
+
   function openTxList() {
-    const all = Store.allTx();
-    const rows = all
-      .map((t) => {
-        const cat = Store.category(t.categoryId);
-        const sign = t.type === "income" ? "+" : "−";
-        return `<button class="tx" data-open-tx="${t.id}">
-          <span class="ic" style="background:${cat.color}22">${cat.icon}</span>
-          <span class="mid"><span class="t">${esc(cat.name)}</span>
-          <span class="s">${esc(UI.relDay(t.date))}${t.note ? " · " + esc(t.note) : ""}${
-          t.installmentCount ? ` · Taksit ${t.installmentIndex}/${t.installmentCount}` : ""
-        }</span></span>
-          <span class="amt ${t.type === "income" ? "in" : "out"}">${sign}${esc(UI.fmtMoney(t.amount))}</span>
-        </button>`;
+    const flt = { q: "", type: "all", cat: "", card: "" };
+    const catOpts = Store.categories()
+      .map((c) => `<option value="${c.id}">${c.icon} ${esc(c.name)}</option>`)
+      .join("");
+    const cardOpts = Store.state.cards
+      .map((c) => `<option value="${c.id}">${esc(c.name)} ••${esc(c.last4 || "")}</option>`)
+      .join("");
+
+    const html = `
+      <div class="field"><input class="input" id="txSearch" placeholder="🔍 Ara: kategori, not, kart, tutar…" /></div>
+      <div class="seg" id="txTypeSeg" style="margin-bottom:12px">
+        <button data-tfilter="all" class="active">Tümü</button>
+        <button data-tfilter="expense">− Gider</button>
+        <button data-tfilter="income">＋ Gelir</button>
+      </div>
+      <div class="grid-2">
+        <div class="field"><select class="input" id="txCat"><option value="">Tüm kategoriler</option>${catOpts}</select></div>
+        <div class="field"><select class="input" id="txCard"><option value="">Tüm kartlar</option>${cardOpts}</select></div>
+      </div>
+      <div class="small muted" id="txSummary" style="margin:2px 0 8px"></div>
+      <div class="list" id="txRows"></div>`;
+
+    UI.openSheet(`Tüm işlemler (${Store.allTx().length})`, html, (root) => {
+      const rowsEl = $("#txRows", root);
+      const sumEl = $("#txSummary", root);
+      const search = $("#txSearch", root);
+
+      const matches = () =>
+        Store.allTx().filter((t) => {
+          if (flt.type !== "all" && t.type !== flt.type) return false;
+          if (flt.cat && t.categoryId !== flt.cat) return false;
+          if (flt.card && (t.cardId || "") !== flt.card) return false;
+          if (flt.q) {
+            const cat = Store.category(t.categoryId);
+            const card = t.cardId ? Store.cardById(t.cardId) : null;
+            const hay = [
+              cat.name,
+              t.note || "",
+              card ? card.name : "",
+              String(t.amount),
+              UI.fmtMoney(t.amount),
+              t.date,
+              UI.relDay(t.date),
+            ]
+              .join(" ")
+              .toLowerCase();
+            if (hay.indexOf(flt.q) < 0) return false;
+          }
+          return true;
+        });
+
+      const paint = () => {
+        const list = matches();
+        const s = Store.sums(list);
+        sumEl.textContent = list.length
+          ? `${list.length} kayıt · +${UI.fmtMoney(s.income)} / −${UI.fmtMoney(s.expense)}`
+          : "Eşleşen kayıt yok";
+        rowsEl.innerHTML = list.length
+          ? list.map(txRowHtml).join("")
+          : `<div class="empty"><span class="big-ico">🔍</span>Filtreye uyan işlem yok.<br/>Aramayı temizleyip tekrar dene.</div>`;
+        $$("[data-open-tx]", rowsEl).forEach((b) => (b.onclick = () => openEdit(b.dataset.openTx)));
+      };
+
+      let deb = null;
+      search.oninput = () => {
+        clearTimeout(deb);
+        deb = setTimeout(() => {
+          flt.q = search.value.trim().toLowerCase();
+          paint();
+        }, 140);
+      };
+      $$("[data-tfilter]", root).forEach(
+        (b) =>
+          (b.onclick = () => {
+            flt.type = b.dataset.tfilter;
+            $$("[data-tfilter]", root).forEach((x) => x.classList.toggle("active", x === b));
+            paint();
+          })
+      );
+      $("#txCat", root).onchange = (e) => {
+        flt.cat = e.target.value;
+        paint();
+      };
+      $("#txCard", root).onchange = (e) => {
+        flt.card = e.target.value;
+        paint();
+      };
+      paint();
+    });
+  }
+
+  /* =========================================================
+     Tekrarlayan (otomatik) işlemler — kira, maaş, abonelik...
+  ========================================================= */
+  function openRecurringList() {
+    const rules = Store.recurringRules();
+    const today = Store.iso(new Date());
+
+    const rows = rules
+      .map((r) => {
+        const cat = Store.category(r.categoryId);
+        const card = r.cardId ? Store.cardById(r.cardId) : null;
+        const paused = r.active === false;
+        const wait = r.nextDate === today ? "bugün" : r.nextDate < today ? "gecikmiş" : UI.relDay(r.nextDate);
+        return `<div class="row-item" style="${paused ? "opacity:.55" : ""}">
+          <span class="ic" style="width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:${cat.color}22;font-size:19px">${cat.icon}</span>
+          <span class="mid">
+            <span class="t">${esc(r.name)} · <b>${esc(UI.fmtMoney(r.amount))}</b></span>
+            <span class="s">${esc(Store.FREQ_LABEL[r.freq] || r.freq)} · ${esc(cat.name)}${card ? " · " + esc(card.name) : ""} · 🔜 ${esc(wait)}</span>
+          </span>
+          <span class="right" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn sm" data-rec-toggle="${r.id}">${paused ? "▶ Devam" : "⏸ Duraklat"}</button>
+            <button class="btn sm" data-rec-edit="${r.id}">Düzenle</button>
+            <button class="btn sm danger" data-rec-del="${r.id}">Sil</button>
+          </span>
+        </div>`;
       })
       .join("");
 
-    UI.openSheet(
-      `Tüm işlemler (${all.length})`,
-      `<div class="list">${rows || `<div class="empty">Kayıt yok</div>`}</div>`,
-      (root) => {
-        $$("[data-open-tx]", root).forEach((b) => (b.onclick = () => openEdit(b.dataset.openTx)));
-      }
-    );
+    const html = `
+      <p class="small muted" style="margin-bottom:10px">
+        Kurallar sen açıkken çalışır: vadesi gelen her otomatik işlem uygulama açıldığında kaydedilir.
+        Aynı tarih asla iki kez oluşturulmaz.
+      </p>
+      <div class="card tight">${rows || `<div class="empty"><span class="big-ico">🔁</span>Henüz otomatik işlem yok.<br/>Kira, maaş, abonelik gibi tekrar edenleri eklediğinde kendiliğinden kaydedilir.</div>`}</div>
+      <button class="btn primary block" id="recNew" style="margin-top:12px">＋ Otomatik işlem ekle</button>`;
+
+    UI.openSheet("Otomatik işlemler", html, (root) => {
+      $("#recNew", root).onclick = () => openRecurringForm();
+      $$("[data-rec-edit]", root).forEach((b) => (b.onclick = () => openRecurringForm(b.dataset.recEdit)));
+      $$("[data-rec-del]", root).forEach(
+        (b) =>
+          (b.onclick = () => {
+            const r = Store.ruleById(b.dataset.recDel);
+            if (UI.confirmBox(`"${r ? r.name : ""}" kuralı silinsin mi?`)) {
+              Store.removeRecurring(b.dataset.recDel);
+              UI.refresh();
+              openRecurringList();
+              UI.toast("Otomatik işlem silindi");
+            }
+          })
+      );
+      $$("[data-rec-toggle]", root).forEach(
+        (b) =>
+          (b.onclick = () => {
+            const r = Store.toggleRecurring(b.dataset.recToggle);
+            UI.toast(r && r.active !== false ? "Kural devrede" : "Kural duraklatıldı");
+            openRecurringList();
+          })
+      );
+    });
+  }
+
+  function openRecurringForm(id) {
+    const editing = id ? Store.ruleById(id) : null;
+    const draft = editing
+      ? { ...editing }
+      : {
+          type: "expense",
+          categoryId: Store.categories("expense")[0] ? Store.categories("expense")[0].id : "",
+          freq: "monthly",
+          startDate: UI.todayISO(),
+          cardId: "",
+          active: true,
+        };
+
+    const catOpts = () =>
+      Store.categories(draft.type)
+        .map((c) => `<option value="${c.id}" ${draft.categoryId === c.id ? "selected" : ""}>${c.icon} ${esc(c.name)}</option>`)
+        .join("");
+    const cardOpts = () =>
+      `<option value="">— Nakit / banka —</option>` +
+      Store.state.cards
+        .map((c) => `<option value="${c.id}" ${draft.cardId === c.id ? "selected" : ""}>${esc(c.name)} ••${esc(c.last4 || "")}</option>`)
+        .join("");
+
+    const html = `
+      <div id="recFormBox"></div>`;
+
+    UI.openSheet(editing ? "Otomatik işlemi düzenle" : "Yeni otomatik işlem", html, (root) => {
+      const box = $("#recFormBox", root);
+
+      const paint = () => {
+        box.innerHTML = `
+          <div class="seg" id="recTypeSeg" style="margin-bottom:12px">
+            <button data-rtype="expense" class="${draft.type === "expense" ? "active" : ""}">− Gider</button>
+            <button data-rtype="income" class="${draft.type === "income" ? "active" : ""}">＋ Gelir</button>
+          </div>
+          <div class="field"><label>Kural adı</label><input class="input" id="recName" placeholder="örn. Kira, Netflix, Maaş" value="${esc(
+            editing ? editing.name : ""
+          )}" /></div>
+          <div class="grid-2">
+            <div class="field"><label>Tekrar</label>
+              <select class="input" id="recFreq">
+                ${Object.keys(Store.FREQ_LABEL)
+                  .map((k) => `<option value="${k}" ${(draft.freq || "monthly") === k ? "selected" : ""}>${Store.FREQ_LABEL[k]}</option>`)
+                  .join("")}
+              </select>
+            </div>
+            <div class="field"><label>Tutar (₺)</label><input class="input" id="recAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="örn. 8500" value="${
+              editing ? editing.amount : ""
+            }" /></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Kategori</label><select class="input" id="recCat">${catOpts()}</select></div>
+            <div class="field"><label>Kart (opsiyonel)</label><select class="input" id="recCard">${cardOpts()}</select></div>
+          </div>
+          <div class="field"><label>İlk uygulama tarihi</label><input class="input" type="date" id="recStart" value="${esc(
+            draft.startDate || UI.todayISO()
+          )}" /></div>
+          <div class="field"><label>Not (opsiyonel)</label><input class="input" id="recNote" placeholder="otomatik kaydedilecek not" value="${esc(
+            editing ? editing.note : ""
+          )}" /></div>
+          <button class="btn primary block" id="recSave">${editing ? "Kaydet" : "＋ Otomatik işlemi oluştur"}</button>
+          ${
+            editing
+              ? `<button class="btn danger block" id="recDel" style="margin-top:10px">Kuralı sil</button>`
+              : ""
+          }`;
+
+        $$("[data-rtype]", box).forEach(
+          (b) =>
+            (b.onclick = () => {
+              draft.type = b.dataset.rtype;
+              draft.categoryId = Store.categories(draft.type)[0] ? Store.categories(draft.type)[0].id : "";
+              const keep = {
+                name: $("#recName", box).value,
+                amount: $("#recAmount", box).value,
+                freq: $("#recFreq", box).value,
+                startDate: $("#recStart", box).value,
+                note: $("#recNote", box).value,
+              };
+              Object.assign(draft, keep);
+              paint();
+            })
+        );
+
+        $("#recSave", box).onclick = () => {
+          const name = $("#recName", box).value.trim();
+          const amount = parseFloat(String($("#recAmount", box).value).replace(",", "."));
+          if (!name) return UI.toast("Kural adı gir");
+          if (!amount || amount <= 0) return UI.toast("Geçerli bir tutar gir");
+          Store.upsertRecurring({
+            id: editing ? editing.id : null,
+            name,
+            amount,
+            type: draft.type,
+            categoryId: $("#recCat", box).value,
+            freq: $("#recFreq", box).value,
+            startDate: $("#recStart", box).value || UI.todayISO(),
+            nextDate: editing ? editing.nextDate : $("#recStart", box).value || UI.todayISO(),
+            cardId: $("#recCard", box).value || null,
+            note: $("#recNote", box).value.trim(),
+            active: editing ? editing.active !== false : true,
+          });
+          const created = Store.processRecurring();
+          UI.closeSheet();
+          UI.refresh();
+          UI.toast(
+            editing
+              ? "Kural güncellendi"
+              : created.length
+              ? `Kural oluşturuldu · ${created.length} vade kaydedildi`
+              : "Kural oluşturuldu"
+          );
+        };
+        const del = $("#recDel", box);
+        if (del)
+          del.onclick = () => {
+            if (UI.confirmBox("Bu kural silinsin mi? (Oluşturulan kayıtlar durur)")) {
+              Store.removeRecurring(editing.id);
+              UI.closeSheet();
+              UI.refresh();
+              UI.toast("Kural silindi");
+            }
+          };
+      };
+      paint();
+    });
+  }
+
+  /* =========================================================
+     Birikim hedefleri
+  ========================================================= */
+  function openGoalSheet(id) {
+    const g = id ? Store.goalById(id) : null;
+    const html = `
+      <div class="field"><label>Hedef adı</label><input class="input" id="gName" placeholder="örn. Tatil, acil durum fonu" value="${esc(
+        g ? g.name : ""
+      )}" /></div>
+      <div class="grid-2">
+        <div class="field"><label>Hedef tutar (₺)</label><input class="input" id="gTarget" type="number" min="0" step="100" placeholder="örn. 50000" value="${
+          g && g.target ? g.target : ""
+        }" /></div>
+        <div class="field"><label>Son gün (opsiyonel)</label><input class="input" id="gDeadline" type="date" value="${esc(
+          g ? g.deadline || "" : ""
+        )}" /></div>
+      </div>
+      <div class="field"><label>Not (opsiyonel)</label><input class="input" id="gNote" placeholder="örn. Ağustosa kadar" value="${esc(
+        g ? g.note || "" : ""
+      )}" /></div>
+      <button class="btn primary block" id="gSave">${g ? "Kaydet" : "＋ Hedef ekle"}</button>
+      ${g ? `<button class="btn danger block" id="gDel" style="margin-top:10px">Hedefi sil</button>` : ""}`;
+
+    UI.openSheet(g ? "Hedefi düzenle" : "Yeni birikim hedefi", html, (root) => {
+      $("#gSave", root).onclick = () => {
+        const name = $("#gName", root).value.trim();
+        const target = parseFloat(String($("#gTarget", root).value).replace(",", "."));
+        if (!name) return UI.toast("Hedef adı gir");
+        if (!target || target <= 0) return UI.toast("Hedef tutarı gir");
+        Store.upsertGoal({
+          id: g ? g.id : null,
+          name,
+          target,
+          deadline: $("#gDeadline", root).value,
+          note: $("#gNote", root).value.trim(),
+        });
+        UI.closeSheet();
+        UI.refresh();
+        UI.toast(g ? "Hedef güncellendi" : "Hedef eklendi");
+      };
+      const del = $("#gDel", root);
+      if (del)
+        del.onclick = () => {
+          if (UI.confirmBox("Bu hedef ve katkıları silinsin mi?")) {
+            Store.removeGoal(g.id);
+            UI.closeSheet();
+            UI.refresh();
+            UI.toast("Hedef silindi");
+          }
+        };
+    });
+  }
+
+  function openGoalDetail(id) {
+    const g = Store.goalById(id);
+    if (!g) return UI.toast("Hedef bulunamadı");
+    const p = Store.goalProgress(g);
+    const contribs = [...(g.contributions || [])].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    const html = `
+      <div class="card tight">
+        <div class="budget-top">
+          <div>
+            <div class="budget-label">${esc(g.name)}</div>
+            <div class="budget-amount">${esc(UI.fmtMoney(p.saved))} <span class="small muted">/ ${esc(UI.fmtMoney(p.target))}</span></div>
+            <div class="small muted" style="margin-top:2px">${
+              p.done ? "🎉 Hedef tamamlandı!" : p.remaining > 0 ? `Kalan: ${esc(UI.fmtMoney(p.remaining))}` : "Hedef tutarı girilmedi"
+            }</div>
+          </div>
+          <div style="text-align:right"><span class="pill ${p.done ? "good" : "accent"}">%${p.pct.toFixed(0)}</span></div>
+        </div>
+        <div class="progress"><i class="${p.done ? "" : p.pct >= 80 ? "warn" : ""}" style="width:${Math.min(100, p.pct).toFixed(1)}%"></i></div>
+        <div class="budget-meta">
+          ${g.deadline ? `<span class="pill">📅 ${esc(UI.relDay(g.deadline))}</span>` : ""}
+          ${
+            !p.done && p.monthly > 0
+              ? `<span class="pill good">💡 ${esc(UI.fmtMoney(p.monthly))}/ay ayır</span>`
+              : ""
+          }
+          <span class="pill">${(g.contributions || []).length} katkı</span>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:14px">Para ayır</div>
+      <div class="grid-2">
+        <div class="field"><input class="input" id="gcAmount" type="number" min="0" step="100" placeholder="Tutar (₺)" inputmode="decimal" /></div>
+        <div class="field"><input class="input" id="gcDate" type="date" value="${UI.todayISO()}" /></div>
+      </div>
+      <button class="btn primary block" id="gcAdd">＋ Bu kadar ayırdım</button>
+      <p class="small muted" style="margin-top:6px">Birikim kaydı harcama sayılmaz — para hâlâ sende.</p>
+
+      <div class="section-title" style="margin-top:14px">Geçmiş</div>
+      <div class="card tight">
+        ${
+          contribs.length
+            ? contribs
+                .map(
+                  (c) => `<div class="row-item">
+                  <span class="ic" style="width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:var(--income-soft)">🏦</span>
+                  <span class="mid"><span class="t">${esc(UI.fmtMoney(c.amount))}</span><span class="s">${esc(UI.relDay(c.date))}</span></span>
+                  <button class="btn sm danger" data-gc-del="${c.id}">Sil</button>
+                </div>`
+                )
+                .join("")
+            : `<div class="empty">Henüz katkı yok</div>`
+        }
+      </div>
+
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn sm" id="gEdit">✏️ Düzenle</button>
+        <button class="btn sm danger" id="gDel2">Hedefi sil</button>
+      </div>`;
+
+    UI.openSheet(g.name, html, (root) => {
+      $("#gcAdd", root).onclick = () => {
+        const amt = parseFloat(String($("#gcAmount", root).value).replace(",", "."));
+        if (!amt || amt <= 0) return UI.toast("Tutar gir");
+        Store.addContribution(g.id, amt, $("#gcDate", root).value);
+        UI.refresh();
+        openGoalDetail(g.id);
+        UI.toast("Birikim eklendi");
+      };
+      $$("[data-gc-del]", root).forEach(
+        (b) =>
+          (b.onclick = () => {
+            Store.removeContribution(g.id, b.dataset.gcDel);
+            UI.refresh();
+            openGoalDetail(g.id);
+          })
+      );
+      $("#gEdit", root).onclick = () => openGoalSheet(g.id);
+      $("#gDel2", root).onclick = () => {
+        if (UI.confirmBox("Bu hedef silinsin mi?")) {
+          Store.removeGoal(g.id);
+          UI.closeSheet();
+          UI.refresh();
+          UI.toast("Hedef silindi");
+        }
+      };
+    });
+  }
+
+  /* =========================================================
+     CSV içe aktarma önizlemesi (banka ekstresi / diğer uygulamalar)
+  ========================================================= */
+  function openCsvPreview(res) {
+    const sample = res.rows.slice(0, 8);
+    const html = `
+      <div class="import-summary">
+        <div class="cell"><b>${res.new}</b><span>yeni kayıt</span></div>
+        <div class="cell"><b>${res.dup}</b><span>aynı (atlanır)</span></div>
+        <div class="cell"><b>${res.bad}</b><span>okunmadı</span></div>
+      </div>
+      <p class="small muted" style="text-align:center">
+        ${res.rows.length} satır okundu${res.autoCats ? ` · ${res.autoCats} kayıt bilinmeyen kategori → <b>Diğer</b>` : ""}.<br>
+        Henüz hiçbir şey eklenmedi.
+      </p>
+      <div class="card tight" style="margin-top:10px">
+        ${sample
+          .map((r) => {
+            const cat = Store.category(r.categoryId);
+            return `<div class="row-item" style="${r.dup ? "opacity:.5" : ""}">
+              <span class="ic" style="width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:${cat.color}22">${cat.icon}</span>
+              <span class="mid"><span class="t">${esc(r.date)} · ${esc(cat.name)}</span><span class="s">${esc(
+              r.note || (r.dup ? "zaten var" : "—")
+            )}</span></span>
+              <span class="amt ${r.type === "income" ? "in" : "out"}">${r.type === "income" ? "+" : "−"}${esc(UI.fmtMoney(r.amount))}</span>
+            </div>`;
+          })
+          .join("")}
+      </div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn primary" id="csvGo">＋ ${res.new} kaydı ekle</button>
+        <button class="btn ghost" id="csvCancel">Vazgeç</button>
+      </div>`;
+
+    UI.openSheet("CSV önizleme", html, (root) => {
+      $("#csvGo", root).onclick = () => {
+        const added = Store.importCSVRows(res.rows);
+        UI.closeSheet();
+        UI.refresh();
+        UI.toast(`${added} işlem içe aktarıldı`);
+      };
+      $("#csvCancel", root).onclick = () => UI.closeSheet();
+    });
   }
 
   /* =========================================================
@@ -584,6 +1047,15 @@ window.App = (function () {
   function init() {
     UI.applyTheme(Store.settings().theme);
     bind();
+
+    /* Vadesi gelen tekrarlayan işlemler — listeneler çizilmeden önce üret */
+    let autoCreated = 0;
+    try {
+      autoCreated = Store.processRecurring().length;
+    } catch (e) {
+      console.warn("Otomatik işlemler işlenemedi:", e);
+    }
+
     Views.header();
     Views.render("home");
     loadRates();
@@ -592,6 +1064,7 @@ window.App = (function () {
     Charts.onResize(() => {
       if (UI.current === "report") Views.render("report");
     });
+    if (autoCreated) setTimeout(() => UI.toast(`🔁 ${autoCreated} otomatik işlem kaydedildi`), 900);
 
     /* PWA kısayolu: /?add=income veya /?add=expense → hızlı ekleme ekranı */
     try {
@@ -624,5 +1097,19 @@ window.App = (function () {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
-  return { openAdd, openEdit, openTxList, openCardSheet, openAssetSheet, openAccountSheet, openImportPreview, start };
+  return {
+    openAdd,
+    openEdit,
+    openTxList,
+    openCardSheet,
+    openAssetSheet,
+    openAccountSheet,
+    openImportPreview,
+    openRecurringList,
+    openRecurringForm,
+    openGoalSheet,
+    openGoalDetail,
+    openCsvPreview,
+    start,
+  };
 })();
